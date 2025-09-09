@@ -6,6 +6,8 @@
 #include <QStandardItemModel>
 #include <QStandardItem>
 #include <QHeaderView>
+#include <QTcpServer>
+#include <QMessageBox>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -33,9 +35,53 @@ MainWindow::MainWindow(QWidget *parent)
     listeningHLayout->addWidget(listenButton);
     listeningHLayout->addWidget(listenLabel);
 
+    // Connect slots
+    connect(listenButton, &QPushButton::clicked, this, &MainWindow::startListening);
+
+
     mainVLayout->addLayout(listeningHLayout);
     mainVLayout->addWidget(tableView);
     setCentralWidget(central);
+}
+
+void MainWindow::startListening()
+{
+    server = new QTcpServer(this);
+    const QHostAddress * address = new QHostAddress("127.0.0.1");
+    uint port = 6164;
+
+    // connect(server, &MainWindow::newConnection, this, &MainWindow::onNewConnection);
+
+    if (!server->listen(*address, port)) {
+        QMessageBox::critical(this, "Error", "Could not start server: " + server->errorString());
+        return;
+    }
+
+    QMessageBox::information(this, "Server", "Listening on port 6164...");
+
+    connect(server, &QTcpServer::newConnection, this, &MainWindow::onNewConnection);
+}
+
+void MainWindow::onNewConnection()
+{
+    QTcpSocket *clientSocket = server->nextPendingConnection();
+
+    qDebug() << "New Client connection from"
+             << clientSocket->peerAddress();
+
+    connect(clientSocket, &QTcpSocket::readyRead, this, &MainWindow::onReadyRead);
+}
+
+void MainWindow::onReadyRead()
+{
+    QTcpSocket *clientSocket = qobject_cast<QTcpSocket*>(sender());
+    if (!clientSocket) return;
+
+    QByteArray data = clientSocket->readAll();
+    qDebug() << "Received:" << data;
+
+    // Optionally, send a reply back
+    clientSocket->write("Message received!\n");
 }
 
 MainWindow::~MainWindow() {}
