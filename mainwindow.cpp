@@ -6,8 +6,9 @@
 #include <QStandardItemModel>
 #include <QStandardItem>
 #include <QHeaderView>
-#include <QTcpServer>
 #include <QMessageBox>
+#include <QXmlStreamReader>
+#include <QDomDocument>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -21,7 +22,7 @@ MainWindow::MainWindow(QWidget *parent)
     QPushButton * listenButton = new QPushButton("Start Listenting");
     QLabel * listenLabel = new QLabel("Listening on port 6164");
 
-    QStandardItemModel *model = new QStandardItemModel(0, 8, this);
+    model = new QStandardItemModel(0, 8, this);
     model->setHorizontalHeaderLabels({" ", "Pallet", "Container", "Code", "Height", "Breadth/Diameter", "Length", "Weight"});
 
     // Create the table view
@@ -78,7 +79,68 @@ void MainWindow::onReadyRead()
     if (!clientSocket) return;
 
     QByteArray data = clientSocket->readAll();
-    qDebug() << "Received:" << data;
+    QXmlStreamReader xml(data);
+    qDebug() << "Received:" << xml.text();
+
+    QDomDocument xmlDoc;
+
+    if(!xmlDoc.setContent(data))
+    {
+        qDebug() << "Invalid xml data!";
+        return;
+    }
+
+
+    QDomElement xmlElemRoot = xmlDoc.documentElement();
+
+    if(xmlElemRoot.tagName() != "pallets")
+    {
+        qDebug() << "Unexpected root element:" << xmlElemRoot.tagName();
+        return;
+    }
+
+    QDomNode palletNode = xmlElemRoot.firstChild();
+
+    while(!palletNode.isNull())
+    {
+        QDomElement palletElem = palletNode.toElement();
+        if(!palletElem.isNull() && palletElem.tagName() == "pallet")
+        {
+            QString palletNumber = palletElem.attribute("number");
+            QString palletWeight = palletElem.attribute("weight");
+
+            QDomNode containerNode = palletElem.firstChild();
+            while(!containerNode.isNull())
+            {
+                QDomElement containerElem = containerNode.toElement();
+                if(!containerElem.isNull())
+                {
+                    QString type = containerElem.tagName();
+                    QString code = containerElem.firstChildElement("code").text();
+                    QString height = containerElem.firstChildElement("height").text();
+                    QString weight = containerElem.firstChildElement("weight").text();
+                    QString length = containerElem.firstChildElement("length").text();
+                    QString diameter = containerElem.firstChildElement("diameter").text();
+                    QString breadth = containerElem.firstChildElement("breadth").text();
+
+
+                    QList<QStandardItem*> rowItems;
+                    rowItems << new QStandardItem("") // empty column
+                             << new QStandardItem(palletNumber)   // Pallet
+                             << new QStandardItem(type)        // Container type
+                             << new QStandardItem(code)        // Code
+                             << new QStandardItem(height)      // Height
+                             << new QStandardItem(!breadth.isEmpty() ? breadth : diameter) // Breadth or Diameter
+                             << new QStandardItem(length)      // Length
+                             << new QStandardItem(weight);     // Weight
+
+                    model->appendRow(rowItems);
+                }
+                containerNode = containerNode.nextSibling();
+            }
+        }
+        palletNode = palletNode.nextSibling();
+    }
 
     // Optionally, send a reply back
     clientSocket->write("Message received!\n");

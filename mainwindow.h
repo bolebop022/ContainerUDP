@@ -4,6 +4,7 @@
 #include <QTcpSocket>
 #include <QMainWindow>
 #include <QTcpServer>
+#include <QStandardItemModel>
 
 class MainWindow : public QMainWindow
 {
@@ -18,6 +19,8 @@ private slots:
     void onNewConnection();
     void onReadyRead();
 private:
+    QStandardItemModel *model;
+
     void startListening();
     // void receieveXML();
     QTcpServer * server;
